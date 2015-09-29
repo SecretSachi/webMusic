@@ -1,16 +1,45 @@
 <html>
 	<head>
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+		
+		<input type="file" id="fileinput"/>
+		
+		
 		<script>
-			jQuery.get('allen_arrogh.wav', function(data) {
-				$('#hexout').html(data)
-				var str = ""
-				for(var i = 0; i < data.length; i++) {
-					str = str + data.charCodeAt(i)
-				}
-				$('#decout').html(str)
-			})
+			function readSingleFile(evt) {
+    //Retrieve the first (and only!) File from the FileList object
+    var f = evt.target.files[0]; 
+
+    if (f) {
+      var r = new FileReader();
+      r.onload = function(e) { 
+	      var contents = e.target.result;
+        alert( "Got the file.n" 
+              +"name: " + f.name + "n"
+              +"type: " + f.type + "n"
+              +"size: " + f.size + " bytesn"
+              + "starts with: " + contents.substr(1, contents.indexOf("n"))
+        );  
+		alert(contents)
+      }
+      r.readAsText(f);
+    } else { 
+      alert("Failed to load file");
+    }
+  }
+
+  document.getElementById('fileinput').addEventListener('change', readSingleFile, false);
 		</script>
+		
+		
+		
+
+  
+		
+		
+		
+		
+		
 	</head>
 	<body>
 		<div id="hexout">
