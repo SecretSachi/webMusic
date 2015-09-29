@@ -1,52 +1,40 @@
 <html>
 	<head>
 		<script src="jquery.min.js"></script>
-		
-		
-		
-		
 		<script>
-		$(document).ready(function(){
-			function readSingleFile(evt) {
-    //Retrieve the first (and only!) File from the FileList object
-    var f = evt.target.files[0]; 
+			$(document).ready(initRead())
 
-    if (f) {
-      var r = new FileReader();
-      r.onload = function(e) { 
-	      var contents = e.target.result;
-        alert( "Got the file.n" 
-              +"name: " + f.name + "n"
-              +"type: " + f.type + "n"
-              +"size: " + f.size + " bytesn"
-              + "starts with: " + contents.substr(1, contents.indexOf("n"))
-        );  
-		alert(contents)
-      }
-      r.readAsText(f);
-    } else { 
-      alert("Failed to load file");
-    }
-  }
+			function initRead() {
+  				document.getElementById('fileinput').addEventListener('change', readSingleFile, false)
+  			}
 
-  document.getElementById('fileinput').addEventListener('change', readSingleFile, false);
-  })
-		</script>
-		
-		
-		
+			function loadFile(evt) {
+				var file = evt.target.files[0] 
+				if (file) {
+  					var reader = new FileReader()
+ 		 			reader.onload = function(e) {
+						readContents(e.target.result)
+  					}
+  					reader.readAsText(file)
+				} else { 
+  					console.log("file failed to load")
+				}
+			}
 
-  
-		
-		
-		
-		
-		
+			function readContents(raw) {
+				var decdata = ""
+				for(var i = 0; i < raw.length; i++) {
+					decdata = decdata + raw.charCodeAt(i)
+				}
+				$('#hexout').html(raw)
+				$('#decout').html(decdata)
+			}
+		</script>		
 	</head>
 	<body>
 		<input type="file" id="fileinput"/>
-		<div id="hexout">
+		<div id="hexout"/>
 		<br>
-		<div id="decout">
+		<div id="decout"/>
 	</body>
 </html>
