@@ -1,0 +1,201 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Audio Reader</title>
+    <link rel="stylesheet" type="text/css" href="css/font-awesome-4.6.3/css/font-awesome.min.css"/>
+    <link rel="stylesheet" type="text/css" href="css/jquery-ui.css"/>
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Ubuntu+Mono"/>
+    <link rel="stylesheet" type="text/css" href="css/buttons.css"/>
+    <link rel="icon" href="res/ico.jpg"/>
+    <script src="lib/jquery.min.js"></script>
+    <script src="lib/jquery-ui.min.js"></script>
+    <script src="lib/aurora.js"></script>
+    <script src="lib/mp3.js"></script>
+    <script src="lib/dsp.js"></script>
+    <script>
+        $(function() {
+            $('#player').draggable({containment: 'parent', stack: '.drag', opacity: 0.5});
+            $('#info').draggable({containment: 'parent', stack: '.drag', opacity: 0.5});
+            $('#info').hide();
+        });
+        $(document).ready(function() {
+            prepareCanvas();
+            console.log("ready");
+        });
+        var player;
+        var audiodata;
+        var currdata;
+        var samplerate;
+        var audiolen;
+        function uploadFile(e) {
+            if (!$('#files')[0].files.length) {console.error('no file'); return;}
+            var file = $('#files')[0].files[0]; //File
+            console.log(file);
+            player = AV.Player.fromFile(file);
+            processFile(file);
+            console.log("file loaded");
+            $('#files').parent().parent().find('button').prop("disabled", false);
+            $('#info').show();
+        }
+        function processFile(file) {
+            var asset = AV.Asset.fromFile(file);
+            asset.on("format", function(format) {
+                samplerate = format.sampleRate;
+                console.log(format);
+            });
+            asset.on("duration", function(duration) {
+                audiolen = duration;
+            });
+            console.log("decoding");
+            asset.decodeToBuffer(function(buffer) {
+                audiodata = buffer;
+                $('#finfo').html(file.name+"<br>"+"sample: "+buffer.length+"<br>"+"s rate: "+samplerate);
+                createGraph(audiodata, samplerate);
+            });
+        }
+        function runfft(i, data, samplerate) {
+            var fft = new FFT(4096, samplerate);
+            var s = i;
+            if(i+4096 >= data.length) {
+                s = data.length-4096;
+            }
+            fft.forward(data.slice(s, s+4096));
+            return fft.spectrum;
+        }
+        function createGraph(data, samplerate) {
+            if(typeof data == 'undefined') { return; }
+            var canvas = document.getElementById('canvas'), ctx = canvas.getContext("2d");
+            var width = canvas.width;
+            var height = canvas.height;
+            ctx.clearRect(0,0,width,height);
+            var xchunk = data.length/width;
+            var ychunk = 2048/height;
+            for(var x = 0; x < width; x+=2) {
+                var spec = runfft(Math.floor(x*xchunk), data, samplerate);
+                var maxi = 0;
+                var avga = 0;
+                for(var i=0;i<spec.length;i++){avga+=spec[i]}
+                avga/=spec.length;
+                for(var i = 1; i < spec.length-1; i++) {
+                    var c = spec[i];
+                    var l = spec[i-1];
+                    var r = spec[i+1];
+                    if(c > spec[maxi]) { maxi = i; }
+                    if(c>Math.max(l, r)) {
+                        var a = (c-(l+r)/2)/c;
+                        if(c > 30*avga) {
+                            ctx.fillStyle = "white";
+                            ctx.fillRect(x-1.5, height-i-1.5, 3, 3);
+                        } else {
+                            var h = 240-(300*a);
+                            var l = 25+a*50;
+                            ctx.fillStyle = "hsl("+h+",100%,"+l+"%)";
+                            ctx.fillRect(x, height-i, 1, 1);
+                        }
+                    }
+                }
+            }
+            console.log("drawn");
+            currdata = data;
+        }
+        function coords(e) {
+            var canvas = document.getElementById('canvas');
+            var h = canvas.height;
+            var w = canvas.width;
+            var freq = Math.round((h-e.clientY)*10.7642626);
+            var notes = ["A","A#/Bb","B","C","C#/Db","D","D#/Eb","E","F","F#/Gb","G","G#/Ab"];
+            var note = notes[Math.round(Math.log(freq/440)/Math.log(1.05946309)+1200)%12];
+            var t = e.clientX/w*audiolen/1000;
+            var m = Math.floor(t/60);
+            var s = (t%60).toFixed(3);
+            $('#minfo').html((m<10?"0":"")+m+":"+(s<10?"0":"")+s+" mm:ss<br>"+(freq>1000?freq/1000+" k":freq+" ")+"hz<br>"+note);
+        }
+        var x;
+        function startsel(e) {
+            x = e.clientX;
+            var y = e.clientY;
+            console.log("s");
+            $('#selector').bind("mousemove", function(event) {
+                var canvas = document.getElementById('selector'), ctx = canvas.getContext("2d");
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "rgba(255,255,255,.2)";
+                ctx.fillRect(x, y, event.clientX-x, event.clientY-y);
+            });
+        }
+        function endsel(e) {
+            $('#selector').unbind("mousemove");
+            var canvas = document.getElementById('selector'), ctx = canvas.getContext("2d");
+            var width = canvas.width;
+            var height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+            var k = currdata.length/width;
+            createGraph(currdata.slice(x*k, e.clientX*k), samplerate);
+        }
+        function refresh(e) {
+            if(typeof player !== 'undefined') { player.stop(); }
+            uploadFile(e);
+            $('#playpause').attr("class", "fa fa-play fa-fw fa-lg");
+        }
+        function togglePlay(e) {
+            $('#playpause').toggleClass("fa-play fa-pause");
+            player.togglePlayback();
+        }
+        function nudge(factor) {
+            var cur = player.currentTime;
+            var dur = player.duration;
+            var tim = cur + factor;
+            tim = Math.max(0, tim);
+            tim = Math.min(dur, tim);
+            tim = Math.floor(tim/100) * 100;
+            player.seek(tim);
+        }
+        function context(id) {
+            return document.getElementById(id).getContext("2d");
+        }
+        function prepareCanvas() {
+            var canvas = document.getElementById('canvas');
+            var selector = document.getElementById('selector');
+            window.addEventListener('resize', resizeCanvas, false);
+
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                selector.width = window.innerWidth;
+                selector.height = window.innerHeight;
+                createGraph(currdata, samplerate);
+            }
+            resizeCanvas();
+        }
+    </script>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <canvas id="selector" onmousedown="startsel(event)" onmousemove="coords(event)" onmouseup="endsel(event)"></canvas>
+    <div id="player" class="drag">
+        <div class="single">
+            <input id="files" type="file" class="invis" onchange="refresh()"/>
+            <label for="files" class="media">
+                <i class="fa fa-file fa-fw"></i>
+            </label>
+        </div>
+        <button class="media" onclick="refresh()" disabled>
+            <i class="fa fa-step-backward fa-fw fa-lg"></i>
+        </button>
+        <button class="media" onclick="nudge(-10000)" disabled>
+            <i class="fa fa-backward fa-fw fa-lg"></i>
+        </button>
+        <button class="media toggleplay" onclick="togglePlay()" disabled>
+            <i id="playpause" class="fa fa-play fa-fw fa-lg"></i>
+        </button>
+        <button class="media" onclick="nudge(10000)" disabled>
+            <i class="fa fa-forward fa-lg"></i>
+        </button>
+    </div>
+    <br>
+    <div id="info" class="drag" style="font-size:12px;">
+        <span id="finfo"></span>
+        <br>
+        <span id="minfo"></span>
+    </div>
+</body>
+</html>
